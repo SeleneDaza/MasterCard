@@ -1,14 +1,4 @@
 services:
-  mastercard-service:
-    build: .
-    ports:
-      - "8001:8000"
-    environment:
-      - DATABASE_URL=postgresql://mc_user:mc123@mastercard-db:5432/mastercard_db
-    depends_on:
-      mastercard-db:
-        condition: service_healthy
-
   mastercard-db:
     image: postgres
     environment:
