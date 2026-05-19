@@ -1,57 +1,56 @@
-# Servicio Mastercard - REST API
+# Mastercard Function — Serverless
 
-Microservicio independiente desarrollado en Python/FastAPI que verifica
+Función serverless desarrollada con Azure Functions y Python que verifica
 si una tarjeta Mastercard existe en la base de datos.
 
 ## Tecnologías
 - Python 3.13
-- FastAPI
-- SQLAlchemy
-- PostgreSQL
-- Docker / Docker Compose
+- Azure Functions Core Tools v4
+- PostgreSQL (Docker)
 
-## Estructura del proyecto
-mastercard-service/
-├── app/
-│   ├── __init__.py
-│   ├── main.py
-│   ├── database.py
-│   ├── models.py
-│   └── routers/
-│       ├── __init__.py
-│       └── mastercard.py
-├── .env
-├── .env.example
-├── .gitignore
-├── docker-compose.yml
-├── Dockerfile
-└── README.md
+## Requisitos previos
+- Python 3.13
+- Docker Desktop
+- Node.js v18+
+- Azure Functions Core Tools v4:
+  npm install -g azure-functions-core-tools@4 --unsafe-perm true
 
 ## Configuración
 
 1. Clona el repositorio
-2. Copia el archivo de variables de entorno:
-cp .env.example .env
-3. Edita `.env` con tus credenciales reales
+2. Instala dependencias:
+   pip install --target=".python_packages/lib/site-packages" psycopg2-binary azure-functions
 
-## Ejecución con Docker
+## Ejecución
 
-docker-compose up --build
+### 1. Levanta la base de datos
+   docker-compose up
 
-El servicio estará disponible en: http://localhost:8001
+### 2. Crea la tabla (solo primera vez)
+   docker exec -it mastercard-mastercard-db-1 psql -U mc_user -d mastercard_db -c "CREATE TABLE tarjetas_mastercard (id SERIAL PRIMARY KEY, numero_tarjeta VARCHAR(16) NOT NULL UNIQUE, cvv VARCHAR(3) NOT NULL, fecha_expiracion DATE NOT NULL);"
+
+### 3. Inserta datos de prueba (solo primera vez)
+   docker exec -it mastercard-mastercard-db-1 psql -U mc_user -d mastercard_db -c "INSERT INTO tarjetas_mastercard (numero_tarjeta, cvv, fecha_expiracion) VALUES ('5111111111111111', '123', '2027-01-01'), ('5222222222222222', '456', '2026-06-15'), ('5333333333333333', '789', '2028-12-31');"
+
+### 4. Levanta la función
+   func start --port 7072
+
+La función estará disponible en: http://localhost:7072/api/verificar-tarjeta
 
 ## Endpoint
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| POST | /mastercard/verificar-tarjeta | Verifica si una tarjeta Mastercard existe |
+| POST | /api/verificar-tarjeta | Verifica si una tarjeta Mastercard existe |
 
-### Parámetros
-| Campo | Tipo | Descripción |
-|-------|------|-------------|
-| numero_tarjeta | string | Número de 16 dígitos |
-| cvv | string | Código de seguridad de 3 dígitos |
-| fecha_expiracion | date | Fecha de expiración (YYYY-MM-DD) |
+### Body JSON
+```json
+{
+  "numero_tarjeta": "5111111111111111",
+  "cvv": "123",
+  "fecha_expiracion": "01/27"
+}
+```
 
 ### Respuesta exitosa
 ```json
@@ -72,11 +71,20 @@ El servicio estará disponible en: http://localhost:8001
 ```
 
 ## Diferencias con Servicio Visa
+
 | Campo | Visa | Mastercard |
 |-------|------|------------|
 | numero_tarjeta | ✅ | ✅ |
 | cvv | 3-4 dígitos | 3 dígitos |
-| fecha_expiracion | ❌ | ✅ |
+| fecha_expiracion | ❌ | ✅ MM/AA |
 
-## Documentación interactiva
-http://localhost:8001/docs
+## Variables de entorno
+
+| Variable | Descripción |
+|----------|-------------|
+| DATABASE_URL | URL de conexión a PostgreSQL |
+
+## Prueba rápida
+curl -X POST http://localhost:7072/api/verificar-tarjeta \
+  -H "Content-Type: application/json" \
+  -d "{\"numero_tarjeta\": \"5111111111111111\", \"cvv\": \"123\", \"fecha_expiracion\": \"01/27\"}"
