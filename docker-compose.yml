@@ -7,7 +7,7 @@ services:
       - POSTGRES_DB=mastercard_db
       - POSTGRES_HOST_AUTH_METHOD=md5
     ports:
-      - "5433:5432"
+      - "5435:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mc_user -d mastercard_db"]
       interval: 5s
