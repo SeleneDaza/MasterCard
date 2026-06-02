@@ -4,8 +4,12 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 
 import csv_logger
+
+Path("logs").mkdir(exist_ok=True)
+logging.basicConfig(level=logging.INFO)
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 

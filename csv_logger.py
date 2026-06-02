@@ -2,7 +2,7 @@ import csv
 import os
 from datetime import datetime, timezone
 
-LOG_PATH = os.path.join(os.path.dirname(__file__), "logs", "transactions.csv")
+LOG_PATH = os.path.join(os.path.dirname(__file__), "logs", "app.log")
 FIELDS = [
     "timestamp", "log_id", "level", "event", "module",
     "transaction_id", "session_id", "user_id", "client_ip",
