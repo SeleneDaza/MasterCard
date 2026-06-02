@@ -3,6 +3,6 @@
   "Values": {
     "AzureWebJobsStorage": "",
     "FUNCTIONS_WORKER_RUNTIME": "python",
-    "DATABASE_URL": "postgresql://mc_user:mc123@localhost:5433/mastercard_db"
+    "DATABASE_URL": "postgresql://postgress:12345678@localhost:5432/mastercard_db"
   }
 }

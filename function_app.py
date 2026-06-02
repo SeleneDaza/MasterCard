@@ -2,16 +2,23 @@ import azure.functions as func
 import psycopg2
 import json
 import logging
+import os
+import time
+
+import csv_logger
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
 @app.route(route="verificar-tarjeta", methods=["POST"])
 def verificar_tarjeta(req: func.HttpRequest) -> func.HttpResponse:
-    logging.info("Mastercard verification request received.")
+    client_ip = req.headers.get("X-Forwarded-For", req.headers.get("Client-IP", ""))
+    module = "function_app.verificar_tarjeta"
 
     try:
         data = req.get_json()
     except ValueError:
+        csv_logger.write_log("ERROR", "CARD_VERIFICATION_ERROR", module, client_ip, "FAILED",
+                             error_code="INVALID_JSON", message="Invalid JSON body")
         return func.HttpResponse(
             json.dumps({"exists": False, "message": "Invalid JSON body", "holder_verified": False}),
             mimetype="application/json",
@@ -20,8 +27,14 @@ def verificar_tarjeta(req: func.HttpRequest) -> func.HttpResponse:
 
     card_number = data.get("card_number")
     cvv = data.get("cvv")
+    last4 = str(card_number)[-4:] if card_number else "????"
+
+    csv_logger.write_log("INFO", "CARD_VERIFICATION_RECEIVED", module, client_ip, "STARTED",
+                         message=f"Verification request received, last4={last4}")
 
     if not card_number or not cvv:
+        csv_logger.write_log("ERROR", "CARD_VERIFICATION_ERROR", module, client_ip, "FAILED",
+                             error_code="MISSING_FIELDS", message="Required fields: card_number, cvv")
         return func.HttpResponse(
             json.dumps({"exists": False, "message": "Required fields: card_number, cvv", "holder_verified": False}),
             mimetype="application/json",
@@ -29,22 +42,26 @@ def verificar_tarjeta(req: func.HttpRequest) -> func.HttpResponse:
         )
 
     conn = None
+    start_time = time.monotonic()
     try:
         conn = psycopg2.connect(
             host="localhost",
-            port=5435,
+            port=5432,
             dbname="mastercard_db",
-            user="mc_user",
-            password="mc123"
+            user="postgres",
+            password="12345678"
         )
         cur = conn.cursor()
 
         cur.execute("SELECT 1 FROM tarjetas_mastercard WHERE cvv = %s", (cvv,))
         cvv_exists = cur.fetchone() is not None
-        logging.info(f"CVV check: {cvv_exists}")
 
         if not cvv_exists:
             cur.close()
+            duration_ms = int((time.monotonic() - start_time) * 1000)
+            csv_logger.write_log("ERROR", "CARD_NOT_FOUND", module, client_ip, "FAILED",
+                                 error_code="CARD_NOT_FOUND", duration_ms=duration_ms,
+                                 message="Card not found")
             return func.HttpResponse(
                 json.dumps({"exists": False, "message": "CVV not found", "holder_verified": False}),
                 mimetype="application/json",
@@ -57,8 +74,16 @@ def verificar_tarjeta(req: func.HttpRequest) -> func.HttpResponse:
         )
         exists = cur.fetchone() is not None
         cur.close()
+        duration_ms = int((time.monotonic() - start_time) * 1000)
 
-        logging.info(f"Card verification completed: exists={exists}")
+        if exists:
+            csv_logger.write_log("SUCCESS", "CARD_FOUND", module, client_ip, "SUCCESS",
+                                 duration_ms=duration_ms, message="Card verified")
+        else:
+            csv_logger.write_log("ERROR", "CARD_NOT_FOUND", module, client_ip, "FAILED",
+                                 error_code="CARD_NOT_FOUND", duration_ms=duration_ms,
+                                 message="Card not found")
+
         return func.HttpResponse(
             json.dumps({
                 "exists": exists,
@@ -69,7 +94,11 @@ def verificar_tarjeta(req: func.HttpRequest) -> func.HttpResponse:
             status_code=200
         )
     except Exception as e:
+        duration_ms = int((time.monotonic() - start_time) * 1000)
         logging.error(f"Unexpected error: {type(e).__name__}: {e}")
+        csv_logger.write_log("ERROR", "CARD_VERIFICATION_ERROR", module, client_ip, "FAILED",
+                             error_code="INTERNAL_ERROR", duration_ms=duration_ms,
+                             message=f"Internal service error: {type(e).__name__}")
         return func.HttpResponse(
             json.dumps({"exists": False, "message": "Internal service error", "holder_verified": False}),
             mimetype="application/json",
